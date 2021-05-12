@@ -30,12 +30,19 @@ const (
 	ServiceAccountName     = "template-validator"
 	ServiceName            = VirtTemplateValidator
 	DeploymentName         = VirtTemplateValidator
+	PrometheusLabel        = "prometheus.kubevirt.io"
 )
 
 func commonLabels() map[string]string {
 	return map[string]string{
 		KubevirtIo: VirtTemplateValidator,
 	}
+}
+
+func podLabels() map[string]string {
+	labels := commonLabels()
+	labels[PrometheusLabel] = ""
+	return labels
 }
 
 func getTemplateValidatorImage() string {
@@ -131,7 +138,7 @@ func newDeployment(namespace string, replicas int32, image string) *apps.Deploym
 			Template: core.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   VirtTemplateValidator,
-					Labels: commonLabels(),
+					Labels: podLabels(),
 				},
 				Spec: core.PodSpec{
 					ServiceAccountName: ServiceAccountName,
