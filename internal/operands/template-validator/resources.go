@@ -21,6 +21,7 @@ import (
 
 const (
 	ContainerPort          = 8443
+	MetricsPort            = 8080
 	KubevirtIo             = "kubevirt.io"
 	SecretName             = "virt-template-validator-certs"
 	VirtTemplateValidator  = "virt-template-validator"
@@ -170,7 +171,12 @@ func newDeployment(namespace string, replicas int32, image string) *apps.Deploym
 							Name:          "webhook",
 							ContainerPort: ContainerPort,
 							Protocol:      core.ProtocolTCP,
-						}},
+						},
+							{
+								Name:          "metrics",
+								ContainerPort: MetricsPort,
+								Protocol:      core.ProtocolTCP,
+							}},
 					}},
 					Volumes: []core.Volume{{
 						Name: volumeName,

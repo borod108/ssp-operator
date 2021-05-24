@@ -344,6 +344,7 @@ spec:
             metadata:
               labels:
                 control-plane: ssp-operator
+                prometheus.kubevirt.io: ""
             spec:
               containers:
               - args:
@@ -360,11 +361,14 @@ spec:
                 - name: CPU_PLUGIN_IMAGE
                 - name: OPERATOR_VERSION
                   value: 0.1.3
-                image: quay.io/kubevirt/ssp-operator:latest
+                image: quay.io/borod108/ssp-operator:devel
                 name: manager
                 ports:
                 - containerPort: 9443
                   name: webhook-server
+                  protocol: TCP
+                - containerPort: 8443
+                  name: metrics
                   protocol: TCP
                 readinessProbe:
                   httpGet:
@@ -372,6 +376,7 @@ spec:
                     port: 9440
                   initialDelaySeconds: 5
                 resources: {}
+              priorityClassName: system-cluster-critical
               serviceAccountName: ssp-operator
               terminationGracePeriodSeconds: 10
       permissions:

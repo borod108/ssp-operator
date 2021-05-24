@@ -20,9 +20,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path"
+	"time"
 
+	"github.com/emicklei/go-restful"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -31,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	sspv1beta1 "kubevirt.io/ssp-operator/api/v1beta1"
 	"kubevirt.io/ssp-operator/controllers"
 	// +kubebuilder:scaffold:imports
@@ -67,6 +71,68 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
+///////////////////////////////////////////////////////////// tmp
+
+func newPromMonitor(errCh chan error) *promMonitor {
+	monitor := &promMonitor{
+		errCh:             errCh,
+		progressWatermark: int64(0),
+		remainingData:     int64(0),
+	}
+
+	return monitor
+}
+
+type promMonitor struct {
+	errCh chan error
+
+	start              int64
+	lastProgressUpdate int64
+	progressWatermark  int64
+	remainingData      int64
+}
+
+func (m *promMonitor) hasMigrationErr() error {
+	select {
+	case err := <-m.errCh:
+		if err != nil {
+			return err
+		}
+	default:
+	}
+
+	return nil
+}
+
+func (m *promMonitor) startMonitor() {
+	m.start = time.Now().UTC().Unix()
+	m.lastProgressUpdate = m.start
+
+	for {
+		time.Sleep(400 * time.Millisecond)
+
+		err := m.hasMigrationErr()
+		if err != nil {
+			setupLog.Error(err, "pormServer Failed")
+		}
+	}
+}
+
+/////////////////////////////////
+
+func runPrometheusServer(metricsAddr string, errCh chan error) {
+	setupLog.Info("Entered runPrometheusServer")
+	mux := restful.NewContainer()
+	mux.Handle("/metrics", promhttp.Handler())
+	setupLog.Info("Defining prom server")
+	server := http.Server{
+		Addr:    ":8443",
+		Handler: mux,
+	}
+	setupLog.Info("Starting prom server with TLS")
+	errCh <- server.ListenAndServeTLS(path.Join(sdkTLSDir, sdkTLSCrt), path.Join(sdkTLSDir, sdkTLSKey))
+}
+
 // Give permissions to use leases for leader election.
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 
@@ -89,9 +155,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	promErrCh := make(chan error)
+	go runPrometheusServer(metricsAddr, promErrCh)
+	monitor := newPromMonitor(promErrCh)
+	go monitor.startMonitor()
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
 		HealthProbeBindAddress: readyProbeAddr,
 		Port:                   9443,
 		LeaderElection:         enableLeaderElection,
@@ -156,7 +226,7 @@ func copyCertificates() error {
 			return fmt.Errorf("failed to copy %s/%s to %s/%s: %w", olmTLSDir, olmTLSKey, sdkTLSDir, sdkTLSKey, err)
 		}
 	} else {
-		setupLog.Info("OLM cert directory not found, using default")
+		setupLog.Info("OLM cert directory not found, using default") //, "olmDirError", olmDirErr, "sdkDirErr", sdkDirErr, "olmDir.IsDir()", olmDir.IsDir())
 	}
 
 	return nil
