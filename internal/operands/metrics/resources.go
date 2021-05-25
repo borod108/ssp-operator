@@ -20,13 +20,29 @@ func newPrometheusRule(namespace string) *promv1.PrometheusRule {
 			},
 		},
 		Spec: promv1.PrometheusRuleSpec{
-			Groups: []promv1.RuleGroup{{
-				Name: "cnv.rules",
-				Rules: []promv1.Rule{{
-					Expr:   intstr.FromString("sum(kubevirt_vmi_phase_count{phase=\"running\"}) by (node,os,workload,flavor)"),
-					Record: "cnv:vmi_status_running:count",
-				}},
-			}},
+			Groups: []promv1.RuleGroup{
+				{
+					Name: "cnv.rules",
+					Rules: []promv1.Rule{
+						{
+							Expr:   intstr.FromString("sum(kubevirt_vmi_phase_count{phase=\"running\"}) by (node,os,workload,flavor)"),
+							Record: "cnv:vmi_status_running:count",
+						},
+						{
+							Record: "num_of_running_ssp_operators",
+							Expr:   intstr.FromString("sum(up{pod=~'ssp-.*'})"),
+						},
+						{
+							Alert: "SSPDown",
+							Expr:  intstr.FromString("num_of_running_ssp_operators == 0"),
+							For:   "5m",
+							Annotations: map[string]string{
+								"summary": "All SSP operator pods are down.",
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 }

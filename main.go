@@ -75,9 +75,7 @@ func init() {
 
 func newPromMonitor(errCh chan error) *promMonitor {
 	monitor := &promMonitor{
-		errCh:             errCh,
-		progressWatermark: int64(0),
-		remainingData:     int64(0),
+		errCh: errCh,
 	}
 
 	return monitor
@@ -85,11 +83,6 @@ func newPromMonitor(errCh chan error) *promMonitor {
 
 type promMonitor struct {
 	errCh chan error
-
-	start              int64
-	lastProgressUpdate int64
-	progressWatermark  int64
-	remainingData      int64
 }
 
 func (m *promMonitor) hasMigrationErr() error {
@@ -105,9 +98,6 @@ func (m *promMonitor) hasMigrationErr() error {
 }
 
 func (m *promMonitor) startMonitor() {
-	m.start = time.Now().UTC().Unix()
-	m.lastProgressUpdate = m.start
-
 	for {
 		time.Sleep(400 * time.Millisecond)
 
