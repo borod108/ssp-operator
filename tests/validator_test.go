@@ -3,13 +3,19 @@ package tests
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"reflect"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"reflect"
-	"strings"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/extensions/table"
@@ -402,10 +408,10 @@ var _ = Describe("Template validator", func() {
 				return apiClient.Create(ctx, vm)
 			}, shortTimeout).Should(BeNil(), "Failed to create VM")
 		})
-		It("[test_id:2960] Negative test - Create a VM with machine type violation", func() {
+		FIt("[test_id:2960] Negative test - Create a VM with machine type violation", func() {
 			template = TemplateWithRules()
 			Expect(apiClient.Create(ctx, template)).ToNot(HaveOccurred(), "Failed to create template: %s", template.Name)
-
+			vmsRejectedBefore := getRejectedVmsCounterValue()
 			// set value unfulfilling validation
 			vmi = addDomainResourcesToVMI(vmi, 2, "test", "128M")
 			vm = NewVirtualMachine(vmi)
@@ -414,6 +420,8 @@ var _ = Describe("Template validator", func() {
 				TemplateNamespaceAnnotation: template.Namespace,
 			}
 			Expect(errors.IsInvalid(apiClient.Create(ctx, vm))).To(BeTrue(), "Should match error type because of unfulfilled validations")
+			vmsRejectedAfter := getRejectedVmsCounterValue()
+			Expect(vmsRejectedAfter-vmsRejectedBefore == 1)
 		})
 		It("[test_id:5586]test with template optional rules unfulfilled", func() {
 			template = TemplateWithRulesOptional()
@@ -754,6 +762,22 @@ var _ = Describe("Template validator", func() {
 		})
 	})
 })
+
+func getRejectedVmsCounterValue() int {
+	pods, err := GetRunningPodsByLabel(validator.VirtTemplateValidator, validator.KubevirtIo, strategy.GetNamespace())
+	Expect(err).ToNot(HaveOccurred(), "Could not find the validator pods")
+	Expect(len(pods.Items)).To(BeNumerically(">", 0))
+	validator_pod := pods.Items[0]
+	ip := validator_pod.Status.PodIP
+	resp, err := http.Get(fmt.Sprintf("https://%s/metrics", ip))
+	Expect(err).To(BeNil(), "Can't get metrics from Template Validator Pod")
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	regex := *regexp.MustCompile(`total_rejected_vms ([0-9]+)`)
+	num_of_rejected_slice := regex.FindSubmatch(body)
+	num_of_rejected, _ := strconv.Atoi(string(num_of_rejected_slice[1]))
+	return num_of_rejected
+}
 
 func addObjectsToTemplates(name, validation string) *templatev1.Template {
 	editable := `/objects[0].spec.template.spec.domain.cpu.sockets

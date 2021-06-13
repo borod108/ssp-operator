@@ -37,6 +37,10 @@ func newPrometheusRule(namespace string) *promv1.PrometheusRule {
 							Expr:   intstr.FromString("sum(up{pod=~'virt-template-validator.*'}) OR on() vector(0)"),
 						},
 						{
+							Record: "total_rejected_vms_past_hour",
+							Expr:   intstr.FromString("increase(total_rejected_vms)[1h]"),
+						},
+						{
 							Alert: "SSPDown",
 							Expr:  intstr.FromString("num_of_running_ssp_operators == 0"),
 							For:   "5m",
@@ -56,6 +60,17 @@ func newPrometheusRule(namespace string) *promv1.PrometheusRule {
 							},
 							Labels: map[string]string{
 								"severity": "Critical",
+							},
+						},
+						{
+							Alert: "High rate of rejected VMs",
+							Expr:  intstr.FromString("total_rejected_vms_past_hour > 5"),
+							For:   "5m",
+							Annotations: map[string]string{
+								"summary": "There were more than 5 rejected vms in the last hour",
+							},
+							Labels: map[string]string{
+								"severity": "Warn",
 							},
 						},
 					},
